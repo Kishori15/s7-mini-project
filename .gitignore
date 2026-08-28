@@ -1,0 +1,71 @@
+# ==================================
+# Python / General
+# ==================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# ==================================
+# Virtual Environment
+# ==================================
+venv/
+.venv/
+env/
+ENV/
+
+# ==================================
+# Environment Variables
+# ==================================
+.env
+
+# ==================================
+# IDE / Editor
+# ==================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ==================================
+# OS Generated Files
+# ==================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==================================
+# Logs
+# ==================================
+logs/*.log
+*.log
+
+# ==================================
+# Data Files (keep structure, ignore content)
+# ==================================
+data/raw/*.csv
+data/processed/*.csv
+data/cache/*.json
+
+
+# ==================================
+# Streamlit
+# ==================================
+/app.py
+.streamlit/secrets.toml
+
+# ==================================
+# Pytest
+# ==================================
+.pytest_cache/
+htmlcov/
+.coverage

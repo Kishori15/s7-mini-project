@@ -1,0 +1,11 @@
+# AI-Powered Customer Feedback Analytics Platform — Tasks
+
+## Phase 1 – Project Setup
+- [x] Task 1: Create the complete project folder structure
+- [ ] Task 2: Initialize Git repository
+- [ ] Task 3: Create Python virtual environment
+- [ ] Task 4: Create requirements.txt
+- [ ] Task 5: Configure .env loading
+- [ ] Task 6: Create logging system
+- [ ] Task 7: Create constants module
+- [ ] Task 8: Create helper utilities
