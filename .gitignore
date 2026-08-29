@@ -56,13 +56,10 @@ data/raw/*.csv
 data/processed/*.csv
 data/cache/*.json
 
-
 # ==================================
 # Streamlit
 # ==================================
-/app.py
 .streamlit/secrets.toml
-
 # ==================================
 # Pytest
 # ==================================
