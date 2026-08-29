@@ -5,7 +5,7 @@ import io
 import os
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 import pandas as pd
@@ -23,10 +23,16 @@ from backend.services.dataset_service import (
     prepare_dataset,
 )
 from backend.services.gemini_service import GeminiQuotaExceededError, GeminiService, GeminiServiceError
+from backend.services.insight_context_service import build_insight_context
+from backend.services.sentiment_service import SentimentServiceError, get_sentiment_service
 
 
 class ProcessRequest(BaseModel):
     mapping: dict[str, str | None] = Field(default_factory=dict)
+
+
+class SentimentRequest(BaseModel):
+    provider: Literal["distilbert", "gemini"] = "distilbert"
 
 
 @dataclass
@@ -38,6 +44,7 @@ class DatasetSession:
     mapping: dict[str, str | None] = field(default_factory=dict)
     processed: pd.DataFrame | None = None
     enriched: pd.DataFrame | None = None
+    sentiment_provider: str | None = None
     insight: str | None = None
 
 
@@ -114,10 +121,15 @@ def _summary(frame: pd.DataFrame) -> dict[str, Any]:
 
 
 def _sentiment_payload(frame: pd.DataFrame) -> dict[str, Any] | None:
-    if "rating" not in frame.columns:
+    if "sentiment" in frame.columns:
+        sentiment_values = frame["sentiment"].astype("string").str.strip().str.title()
+        sentiment_values = sentiment_values[sentiment_values.isin(["Positive", "Neutral", "Negative"])]
+        counts = {str(label): int(count) for label, count in sentiment_values.value_counts().items()}
+    elif "rating" in frame.columns:
+        distribution = get_sentiment_distribution(frame)
+        counts = {row["sentiment"]: int(row["count"]) for row in _records(distribution)}
+    else:
         return None
-    distribution = get_sentiment_distribution(frame)
-    counts = {row["sentiment"]: int(row["count"]) for row in _records(distribution)}
     total = sum(counts.values())
     return {
         "counts": counts,
@@ -129,21 +141,7 @@ def _sentiment_payload(frame: pd.DataFrame) -> dict[str, Any] | None:
 
 
 def _dashboard_context(frame: pd.DataFrame, mapping: dict[str, str | None]) -> dict[str, Any]:
-    context: dict[str, Any] = {"review_count": int(len(frame))}
-    if "rating" in frame and frame["rating"].notna().any():
-        context["average_rating"] = round(float(frame["rating"].mean()), 2)
-    sentiment = _sentiment_payload(frame)
-    if sentiment:
-        context["sentiment_counts"] = sentiment["counts"]
-    for field in ("product_name", "brand", "category"):
-        if mapping.get(field) and field in frame:
-            context[f"top_{field}"] = frame[field].value_counts().head(5).to_dict()
-    if mapping.get("review_date") and "review_date" in frame and frame["review_date"].notna().any():
-        context["date_range"] = [
-            str(frame["review_date"].min().date()),
-            str(frame["review_date"].max().date()),
-        ]
-    return context
+    return build_insight_context(frame, mapping)
 
 
 def _merge_enrichment(frame: pd.DataFrame, additions: list[dict[str, Any]]) -> pd.DataFrame:
@@ -163,6 +161,20 @@ def _merge_enrichment(frame: pd.DataFrame, additions: list[dict[str, Any]]) -> p
         else:
             merged = merged.rename(columns={ai_column: column})
     return merged
+
+
+def _run_local_sentiment(session: DatasetSession, processed: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
+    records = processed[
+        [column for column in ["review_id", "review_text", "rating", "product_name", "brand", "category"] if column in processed]
+    ].to_dict(orient="records")
+    try:
+        service = get_sentiment_service()
+        additions = service.analyze_reviews(records)
+    except SentimentServiceError as exc:
+        raise HTTPException(status_code=503, detail=f"Local sentiment analysis is unavailable: {exc}") from exc
+    session.enriched = _merge_enrichment(processed, additions)
+    session.sentiment_provider = "distilbert"
+    return session.enriched, service.model_info.__dict__
 
 
 @app.get("/api/health")
@@ -221,6 +233,7 @@ def process_dataset(dataset_id: str, request: ProcessRequest) -> dict[str, Any]:
     session.mapping = request.mapping
     session.processed = processed
     session.enriched = None
+    session.sentiment_provider = None
     session.insight = None
     return {
         "dataset_id": dataset_id,
@@ -259,27 +272,33 @@ def get_analytics(
 
 
 @app.post("/api/datasets/{dataset_id}/sentiment")
-def analyze_sentiment(dataset_id: str) -> dict[str, Any]:
+def analyze_sentiment(dataset_id: str, request: SentimentRequest | None = None) -> dict[str, Any]:
     session = _session_or_404(dataset_id)
     processed = _processed_or_400(session)
     records = processed[
         [column for column in ["review_id", "review_text", "rating", "product_name", "brand", "category"] if column in processed]
     ].to_dict(orient="records")
-    infer_fields = {
-        field
-        for field, fallback in (("product_name", "Unknown Product"), ("brand", "Unknown Brand"), ("category", "Uncategorized"))
-        if session.mapping.get(field) and field in processed and processed[field].eq(fallback).any()
-    }
-    try:
-        additions = GeminiService(dataset_hash=session.content_hash).enrich_dashboard_data(records, infer_fields)
-        warning = None
-    except GeminiQuotaExceededError as exc:
-        additions = exc.cached_results
-        warning = str(exc)
-    except GeminiServiceError as exc:
-        raise HTTPException(status_code=503, detail=f"AI sentiment analysis is unavailable: {exc}") from exc
+    provider = request.provider if request is not None else "distilbert"
+    warning = None
+    if provider == "distilbert":
+        enriched, model_info = _run_local_sentiment(session, processed)
+    else:
+        infer_fields = {
+            field
+            for field, fallback in (("product_name", "Unknown Product"), ("brand", "Unknown Brand"), ("category", "Uncategorized"))
+            if session.mapping.get(field) and field in processed and processed[field].eq(fallback).any()
+        }
+        try:
+            additions = GeminiService(dataset_hash=session.content_hash).enrich_dashboard_data(records, infer_fields)
+        except GeminiQuotaExceededError as exc:
+            additions = exc.cached_results
+            warning = str(exc)
+        except GeminiServiceError as exc:
+            raise HTTPException(status_code=503, detail=f"Gemini sentiment analysis is unavailable: {exc}") from exc
+        session.enriched = _merge_enrichment(processed, additions)
+        session.sentiment_provider = "gemini"
+        model_info = None
 
-    session.enriched = _merge_enrichment(processed, additions)
     return {
         "dataset_id": dataset_id,
         "columns": session.enriched.columns.tolist(),
@@ -287,6 +306,8 @@ def analyze_sentiment(dataset_id: str) -> dict[str, Any]:
         "sentiment": _sentiment_payload(session.enriched),
         "preview": _records(session.enriched.head(10)),
         "warning": warning,
+        "provider": provider,
+        "model": model_info,
     }
 
 
@@ -294,7 +315,11 @@ def analyze_sentiment(dataset_id: str) -> dict[str, Any]:
 def generate_insight(dataset_id: str) -> dict[str, str]:
     session = _session_or_404(dataset_id)
     processed = _processed_or_400(session)
-    source = session.enriched if session.enriched is not None else processed
+    # Insights always interpret local DistilBERT results. A prior Gemini
+    # comparison therefore never becomes the source of aggregate sentiment.
+    if session.sentiment_provider != "distilbert" or session.enriched is None:
+        _run_local_sentiment(session, processed)
+    source = session.enriched
     try:
         session.insight = GeminiService(dataset_hash=session.content_hash).generate_product_insight(
             _dashboard_context(source, session.mapping)

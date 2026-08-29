@@ -631,9 +631,11 @@ class GeminiService:
             return cached["insight"]
 
         prompt = (
-            "You are advising a product developer. Based only on this JSON dashboard summary, write a concise "
-            "actionable insight with: overall signal, important customer issues, suggested improvements, and any "
-            "trend that is actually supported by the data. Do not invent facts. Use plain text with short bullets. "
+            "You are advising a product developer. Use only the supplied JSON evidence. Distinguish observed evidence "
+            "from interpretation and do not invent facts. Write concise plain-text bullets covering: overall signal; "
+            "what customers like; what customers dislike or recurring problems; improvement opportunities; and "
+            "actionable recommendations. Refer to supplied themes or representative reviews when relevant. Do not claim "
+            "a theme is widespread unless its supplied count supports that conclusion. "
             "Dashboard summary:\n" + json.dumps(context, default=str)
         )
         response = self._generate_content_with_retry(

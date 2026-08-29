@@ -798,5 +798,11 @@
   "dashboard:409c897dd075c2497e15176a8e8ae0812a14f49bc2f35d6fa5565fbe66882218": {
     "review_id": "review-200",
     "sentiment": "Positive"
+  },
+  "insight:5c4f4c0b1af1950571f7790ee188df96ef9f4f66c14e965c5239489c35abb266": {
+    "insight": "Based on the provided dashboard summary, here is the actionable insight:\n\n* **Overall Signal:** Sentiment is leaning positive (17"
+  },
+  "insight:af4e39166e9b76bf63fc06db685388e3704ef47a7f86481bfed98fc795aa4562": {
+    "insight": "Here are the findings and recommendations based strictly on the provided dataset:\n\n* **Overall Signal:**\n  * *"
   }
 }

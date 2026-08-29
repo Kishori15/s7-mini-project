@@ -1,6 +1,8 @@
 # 📊 AI-Powered Customer Feedback Analytics Platform
 
-An AI-powered analytics platform that automatically analyzes customer reviews using **Google Gemini**, generates meaningful business insights, and presents the results through an interactive **Streamlit** dashboard.
+An analytics platform that classifies customer-review sentiment locally with **DistilBERT**, optionally compares it with **Google Gemini**, generates Gemini business insights, and presents results through an interactive **Streamlit** dashboard.
+
+Local sentiment analysis uses `distilbert-base-uncased-finetuned-sst-2-english`; the Streamlit dashboard presents independent **Analyze with Local DistilBERT** and **Analyze with Gemini** actions for side-by-side manual evaluation.
 
 ---
 
@@ -23,7 +25,8 @@ An AI-powered analytics platform that automatically analyzes customer reviews us
 | Dashboard | Streamlit |
 | Charts | Plotly |
 | Data Processing | Pandas |
-| AI | Google Gemini (gemini-2.0-flash) |
+| Local sentiment | PyTorch + Hugging Face Transformers (DistilBERT SST-2) |
+| Optional AI | Google Gemini (gemini-2.0-flash) |
 | Configuration | python-dotenv |
 
 ---
@@ -58,7 +61,7 @@ feedback_management/
 ### Prerequisites
 
 - Python 3.11 or higher
-- Google Gemini API key
+- Python 3.11 or higher. A Gemini API key is needed only for Gemini comparison/insights.
 
 ### Installation
 
@@ -77,7 +80,7 @@ pip install -r requirements.txt
 
 # Configure environment
 copy .env.example .env
-# Edit .env and add your GEMINI_API_KEY
+# Edit .env and add GEMINI_API_KEY only if you want Gemini comparison/insights
 ```
 
 ### Run the Application
@@ -87,6 +90,8 @@ streamlit run app.py
 ```
 
 Open `http://localhost:8501` in your browser.
+
+On the first local analysis, Transformers downloads `distilbert-base-uncased-finetuned-sst-2-english` into the standard Hugging Face cache. Later runs reuse that cache. Review text is never sent to an external service when **Analyze with Local DistilBERT** is selected. CUDA is used automatically when available; otherwise inference runs on CPU. Set `SENTIMENT_BATCH_SIZE` (default `8`) in `.env` for constrained hardware. Long reviews are tokenized with truncation at 512 tokens. Local output uses `Positive`, `Neutral`, or `Negative` plus `sentiment_confidence`; neutral represents a low-confidence binary prediction.
 
 ---
 
