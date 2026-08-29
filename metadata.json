@@ -1,0 +1,6 @@
+{
+  "name": "Customer Feedback Analytics",
+  "description": "AI-powered customer feedback and review analytics platform with DistilBERT sentiment classification, interactive trend dashboards, and Gemini executive insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
